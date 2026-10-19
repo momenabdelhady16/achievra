@@ -174,6 +174,11 @@ export class TodoView {
       .filter(Boolean);
   }
 
+  /** Return the latest saved Todo snapshot currently owned by this view. */
+  getTodoById(id) {
+    return this.todosById.get(id) ?? null;
+  }
+
   /** Return whether a task card is attached to its expected section. */
   isTodoElementInSection(id, isCompleted) {
     const expectedList = isCompleted ? this.elements.completedList : this.elements.pendingList;
