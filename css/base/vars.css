@@ -1,0 +1,63 @@
+/* ==========================================================================
+   Achievra — styles (design tokens from 04-design-system-and-tokens.md)
+   Desktop-first. Breakpoints: >768 desktop, <=768 tablet, <=576 mobile, <=378 small.
+   ========================================================================== */
+
+:root {
+  /* Primary */
+  --clr-primary:         #087ff5;
+  --clr-primary-hover:   #006fe0;
+  --clr-primary-shadow:  rgba(8, 127, 245, 0.2);
+  --clr-primary-light:   #eaf5ff;
+  --clr-primary-lighter: #edf6ff;
+  --clr-primary-glow:    rgba(7, 133, 255, 0.21);
+  --clr-primary-ring:    rgba(8, 127, 245, 0.07);
+
+  /* Typography */
+  --clr-text-heading:    #13213c;
+  --clr-text-body:       #17233b;
+  --clr-text-input:      #22314c;
+  --clr-text-secondary:  #67748b;
+  --clr-text-muted:      #8490a4;
+  --clr-text-faint:      #98a4b9;
+  --clr-text-completed:  #94a0b1;
+
+  /* Borders */
+  --clr-border-light:    #e8eef7;
+  --clr-border-default:  #e5ebf3;
+  --clr-border-input:    #dce5f0;
+  --clr-border-form:     #dfeaf7;
+  --clr-border-hover:    #cfddeb;
+  --clr-border-empty:    #d9e3ef;
+
+  /* Backgrounds */
+  --clr-bg-page:         #f7faff;
+  --clr-bg-card:         #ffffff;
+  --clr-bg-hover:        #f5f8fc;
+  --clr-bg-badge:        #eef2f7;
+  --clr-bg-completed:    #fbfcfe;
+  --clr-bg-empty:        #fbfdff;
+  --clr-bg-note:         #f2f8ff;
+
+  /* Status */
+  --clr-danger:          #e5484d;
+  --clr-danger-bg:       #fff0f0;
+  --clr-danger-border:   #ffc7c7;
+  --clr-warning:         #b45309;
+  --clr-warning-bg:      #fefce8;
+  --clr-warning-border:  #fde047;
+  --clr-overlay:         rgba(16, 33, 60, 0.4);
+
+  /* Type families */
+  --ff-body:    "DM Sans", system-ui, -apple-system, sans-serif;
+  --ff-heading: "Manrope", system-ui, -apple-system, sans-serif;
+
+  /* Motion */
+  --transition-fast:     0.18s ease;
+  --transition-drawer:   0.25s ease;
+  --transition-mutate:   0.30s ease;
+
+  /* Layout (from specified dimensions) */
+  --sidebar-width:       16.5rem;
+  --completed-card-height: 5.0625rem;
+}

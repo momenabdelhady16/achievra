@@ -1,0 +1,7 @@
+{
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "for test_file in tests/*.test.js; do node \"$test_file\" || exit 1; done"
+  }
+}

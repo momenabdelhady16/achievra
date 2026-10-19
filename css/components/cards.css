@@ -1,0 +1,126 @@
+/* Pending and Completed task cards. */
+
+/* ── Task card ──────────────────────────────────────────────────────────── */
+.task-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0.75rem;
+  height: auto;
+  min-height: 0;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--clr-border-default);
+  border-radius: 0.8125rem;
+  background: var(--clr-bg-card);
+  transition: background var(--transition-fast), border-color var(--transition-fast), opacity var(--transition-mutate), transform var(--transition-mutate);
+}
+
+.task-item--entering { opacity: 0; transform: translateY(0.35rem); }
+.task-item.task-item--exiting { opacity: 0; transform: translateY(-0.35rem); pointer-events: none; }
+
+.task-item:hover { border-color: var(--clr-border-hover); }
+
+.task-item__checkbox {
+  width: 1.125rem;
+  height: 1.125rem;
+  margin: 0.125rem 0 0;
+  accent-color: var(--clr-primary);
+  cursor: pointer;
+}
+
+.task-item__content { min-width: 0; }
+
+.task-item__title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--clr-text-heading);
+  overflow-wrap: anywhere;
+}
+
+.task-item__description,
+.task-item__meta {
+  font-size: 0.6875rem;
+  line-height: 1.4;
+  color: var(--clr-text-secondary);
+}
+
+.task-item__description {
+  margin-top: 0.125rem;
+  font-size: 0.8125rem;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.task-item__dates { display: flex; flex-wrap: wrap; gap: 0.4375rem; margin-top: 0.4375rem; }
+
+.task-item__date {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3125rem;
+  font-size: 0.6875rem;
+  line-height: 1.4;
+  color: var(--clr-text-secondary);
+}
+
+.task-item__past {
+  padding: 0.125rem 0.375rem;
+  border: 1px solid var(--clr-warning-border);
+  border-radius: 0.375rem;
+  background: var(--clr-warning-bg);
+  color: var(--clr-warning);
+  font-size: 0.625rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.task-item__date--past { color: var(--clr-warning); }
+
+.task-item__actions { display: flex; align-items: center; gap: 0.4375rem; }
+
+/* State modifiers */
+.task-item--overdue { background: var(--clr-warning-bg); border-color: var(--clr-warning-border); }
+.task-item--selected { background: var(--clr-primary-lighter); border-color: var(--clr-primary); }
+.task-item--duplicate-match { outline: 3px solid var(--clr-warning-border); outline-offset: 2px; }
+.task-item--pending-deletion { opacity: 0.55; }
+.task-item--pending-deletion .task-item__title { text-decoration: line-through; }
+
+/* Completed card: fixed collapsed height */
+.task-item--completed {
+  align-items: center;
+  height: var(--completed-card-height);
+  overflow: hidden;
+  background: var(--clr-bg-completed);
+}
+
+.task-item--completed .task-item__title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-decoration: line-through;
+  color: var(--clr-text-completed);
+}
+
+.task-item--completed .task-item__description {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-item--completed .task-item__dates { margin-top: 0.125rem; }
+
+.task-item__title-row { display: flex; align-items: center; gap: 0.5rem; }
+
+/* TodoView assigns one of the two measured expanded heights inline. */
+.task-item--completed.task-item--expanded {
+  align-items: start;
+  height: auto;
+  min-height: var(--completed-card-height);
+  overflow: visible;
+}
+
+.task-item--completed.task-item--expanded .task-item__description {
+  overflow: visible;
+  white-space: pre-line;
+}

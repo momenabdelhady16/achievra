@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Achievra — To-Do List</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700;800&family=Manrope:wght@700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="app-shell">
+
+  <!-- ========== Mobile navbar (visible at 768px and below) ========== -->
+  <header class="navbar">
+    <div class="navbar__brand">
+      <div class="navbar__logo" aria-hidden="true">
+        <img src="favicon.svg" alt="">
+      </div>
+    </div>
+    <button class="navbar__toggler btn btn--secondary" id="sidebarToggler" type="button"
+            aria-label="Open navigation menu" aria-expanded="false" aria-controls="sidebar-navigation">
+      <svg class="icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
+  </header>
+
+  <!-- ========== Sidebar (fixed on desktop, closed off-canvas drawer on mobile) ==========
+       JS adds role="dialog" aria-modal="true" aria-labelledby="sidebarDialogTitle" only while open. -->
+  <aside class="sidebar" id="sidebar-navigation" aria-label="Task views navigation">
+    <div class="sidebar__brand">
+      <div class="sidebar__logo" aria-hidden="true">
+        <img src="favicon.svg" alt="">
+      </div>
+      <span class="brand__name" id="sidebarDialogTitle">Achievra</span>
+    </div>
+
+    <nav class="sidebar__nav" aria-label="Task views">
+      <p class="nav-label">Tasks</p>
+      <button class="sidebar__tab sidebar__tab--active" type="button" aria-current="page">
+        <svg class="icon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="13" x2="15" y2="13"/></svg>
+        <span>All Tasks</span>
+        <b class="sidebar__badge" id="totalTasksBadge">0</b>
+      </button>
+    </nav>
+
+    <div class="sidebar__note">
+      <p class="nav-label">Tip</p>
+      <p class="sidebar__note-text">Select multiple tasks using checkboxes to complete or delete them at once.</p>
+    </div>
+  </aside>
+
+  <!-- Backdrop for the mobile drawer; shown with .sidebar-overlay--visible -->
+  <div class="sidebar-overlay" id="sidebarOverlay" aria-hidden="true"></div>
+
+  <!-- ========== Main content ========== -->
+  <main class="main-content" id="mainContent">
+
+    <header class="main-header">
+      <div class="main-header__titles">
+        <h1 class="main-header__title">All Tasks</h1>
+        <p class="main-header__subtitle" id="pendingSummaryText">Manage and track your tasks</p>
+      </div>
+      <button class="btn btn--primary main-header__add-btn" id="openAddModalBtn" type="button">
+        <svg class="icon" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        <span>Add Task</span>
+      </button>
+    </header>
+
+    <!-- In-app status and decision notifications -->
+    <div class="notification-region" id="notificationRegion" role="region" aria-label="Notifications"></div>
+
+    <!-- Polite live region for status and operation messages -->
+    <div class="visually-hidden" id="statusRegion" role="status" aria-live="polite" aria-atomic="true"></div>
+
+    <!-- Task form (hidden until opened by JS) -->
+    <section class="task-form" id="taskFormCard" hidden aria-labelledby="formTitle">
+      <div class="task-form__header">
+        <h2 class="task-form__heading" id="formTitle">Create New Task</h2>
+        <button class="task-form__close-btn btn btn--secondary" id="closeFormBtn" type="button" aria-label="Close task form">
+          <svg class="icon" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          <span>Close</span>
+        </button>
+      </div>
+
+      <form id="taskForm" novalidate aria-describedby="formError">
+        <input type="hidden" id="editTaskId" name="id" value="">
+        <p class="task-form__error-message" id="formError" role="alert" hidden></p>
+
+        <div class="task-form__grid">
+          <!-- Title (counter and limit enforced later by JS; no maxlength) -->
+          <div class="task-form__group task-form__group--wide">
+            <div class="task-form__label-row">
+              <label class="task-form__label" for="taskTitleInput">Task title <span aria-hidden="true">*</span></label>
+              <span class="task-form__counter" id="titleCounter" aria-live="polite" aria-atomic="true">0 / 32</span>
+            </div>
+            <input class="task-form__input" type="text" id="taskTitleInput" name="title" required aria-required="true"
+                   autocomplete="off" placeholder="e.g., Finalize project report"
+                   aria-describedby="titleHelp titleCounter titleError">
+            <p class="task-form__help" id="titleHelp">Required. Up to 32 characters.</p>
+            <p class="task-form__error-message" id="titleError" role="alert" hidden></p>
+          </div>
+
+          <!-- Description -->
+          <div class="task-form__group task-form__group--wide">
+            <div class="task-form__label-row">
+              <label class="task-form__label" for="taskDescInput">Description <span class="task-form__optional">(optional)</span></label>
+              <span class="task-form__counter" id="descCounter" aria-live="polite" aria-atomic="true">0 / 256</span>
+            </div>
+            <textarea class="task-form__input" id="taskDescInput" name="description" rows="3"
+                      placeholder="Add context, links, or notes"
+                      aria-describedby="descHelp descCounter descError"></textarea>
+            <p class="task-form__help" id="descHelp">Optional. Up to 256 characters.</p>
+            <p class="task-form__error-message" id="descError" role="alert" hidden></p>
+          </div>
+
+          <!-- Due date input: one date at a time; a task may hold several -->
+          <div class="task-form__group">
+            <label class="task-form__label" for="taskDateInput">Due date <span class="task-form__optional">(optional)</span></label>
+            <div class="task-form__date-row">
+              <input class="task-form__input" type="date" id="taskDateInput" name="date"
+                     aria-describedby="dateHelp dateError">
+              <button class="btn btn--secondary" id="addDateBtn" type="button">
+                <svg class="icon" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                <span>Add date</span>
+              </button>
+            </div>
+            <p class="task-form__help" id="dateHelp">Add dates one at a time. A task can have several.</p>
+            <p class="task-form__error-message" id="dateError" role="alert" hidden></p>
+          </div>
+
+          <!-- Selected due dates -->
+          <div class="task-form__group">
+            <p class="task-form__label" id="selectedDatesLabel">Selected due dates</p>
+            <ul class="task-form__dates" id="selectedDatesList" aria-labelledby="selectedDatesLabel"></ul>
+            <p class="task-form__help" id="selectedDatesEmpty">No due dates added</p>
+          </div>
+        </div>
+
+        <div class="task-form__actions">
+          <button class="btn btn--primary task-form__submit-btn" type="submit" id="saveTaskBtn">Save Task</button>
+          <button class="btn btn--secondary" type="button" id="cancelFormBtn">Cancel</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- ========== Pending (grows with the page; no inner scrollbar) ========== -->
+    <section class="task-section task-section--pending" aria-labelledby="pendingHeading">
+      <div class="task-section__header">
+        <h2 class="task-section__heading" id="pendingHeading">Pending</h2>
+        <span class="task-section__count" id="pendingCountBadge">0</span>
+      </div>
+      <div class="empty-state" id="pendingEmpty">
+        <p class="empty-state__title">No tasks</p>
+        <p class="empty-state__text">Use Add Task to create your first task.</p>
+      </div>
+      <ul class="task-list" id="pendingList" aria-live="polite"></ul>
+    </section>
+
+    <!-- Undo All (shown by JS while more than one deletion is pending) -->
+    <div class="undo-banner" id="undoAllBanner" hidden>
+      <p class="undo-banner__text" id="undoAllText">Several tasks will be deleted.</p>
+      <button class="undo-banner__btn btn btn--secondary" id="undoAllBtn" type="button">
+        <svg class="icon" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+        <span>Undo All</span>
+      </button>
+    </div>
+
+    <!-- ========== Completed (inner scroll after four collapsed cards) ========== -->
+    <section class="task-section task-section--completed" aria-labelledby="completedHeading">
+      <div class="task-section__header">
+        <h2 class="task-section__heading" id="completedHeading">Completed</h2>
+        <span class="task-section__count" id="completedCountBadge">0</span>
+      </div>
+      <div class="empty-state" id="completedEmpty">
+        <p class="empty-state__title">No tasks</p>
+        <p class="empty-state__text">Completed tasks appear here.</p>
+      </div>
+      <div class="completed-scroll-container" id="completedScroll" tabindex="0" role="region" aria-label="Completed tasks">
+        <ul class="task-list" id="completedList" aria-live="polite"></ul>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ========== Floating bulk action bar (hidden until a selection exists) ========== -->
+  <aside class="bulk-bar" id="bulkBar" hidden aria-label="Bulk actions">
+    <span class="bulk-bar__count" id="bulkCount">0 tasks selected</span>
+    <div class="bulk-bar__actions">
+      <button class="btn btn--primary bulk-bar__btn-complete" id="bulkCompleteBtn" type="button">
+        <svg class="icon" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><polyline points="20 6 9 17 4 12"/></svg>
+        <span>Mark Complete</span>
+      </button>
+      <button class="btn btn--danger bulk-bar__btn-delete" id="bulkDeleteBtn" type="button">
+        <svg class="icon" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        <span>Delete</span>
+      </button>
+    </div>
+  </aside>
+
+</div>
+
+<!-- ========== Inert templates (static markup only; JS fills text via textContent) ========== -->
+
+<!-- Pending task card -->
+<template id="pendingTaskTemplate">
+  <li class="task-item task-item--overdue" data-id="">
+    <input class="task-item__checkbox" type="checkbox" data-action="select" aria-label="Select task: Task title">
+    <div class="task-item__content">
+      <h3 class="task-item__title">Task title</h3>
+      <p class="task-item__description">Task description</p>
+      <ul class="task-item__dates" aria-label="Due dates">
+        <li class="task-item__date task-item__date--past">
+          <svg class="icon" width="13" height="13" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <time datetime="2026-10-01">2026-10-01</time>
+          <span class="task-item__past">Past</span>
+          <button class="task-item__date-remove" type="button" data-action="remove-date" aria-label="Remove date 2026-10-01">
+            <svg class="icon" width="12" height="12" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6L6 18"/></svg>
+            <span>Remove</span>
+          </button>
+        </li>
+        <li class="task-item__date">
+          <svg class="icon" width="13" height="13" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <time datetime="2026-11-05">2026-11-05</time>
+          <button class="task-item__date-remove" type="button" data-action="remove-date" aria-label="Remove date 2026-11-05">
+            <svg class="icon" width="12" height="12" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6L6 18"/></svg>
+            <span>Remove</span>
+          </button>
+        </li>
+      </ul>
+    </div>
+    <div class="task-item__actions">
+      <button class="task-item__btn task-item__btn-edit" type="button" data-action="edit" aria-label="Edit task: Task title">
+        <svg class="icon" width="15" height="15" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        <span>Edit</span>
+      </button>
+      <button class="task-item__btn task-item__btn-delete" type="button" data-action="delete" aria-label="Delete task: Task title">
+        <svg class="icon" width="15" height="15" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        <span>Delete</span>
+      </button>
+    </div>
+  </li>
+</template>
+
+<!-- Completed task card (no edit control; empty description shows "No description") -->
+<template id="completedTaskTemplate">
+  <li class="task-item task-item--completed" data-id="">
+    <input class="task-item__checkbox" type="checkbox" data-action="select" aria-label="Select task: Task title">
+    <div class="task-item__content">
+      <div class="task-item__title-row">
+        <h3 class="task-item__title">Task title</h3>
+        <button class="task-item__toggle" type="button" data-action="expand"
+                aria-expanded="false" aria-controls="completed-description-ID">
+          <svg class="icon" width="13" height="13" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><polyline points="6 9 12 15 18 9"/></svg>
+          <span>Details</span>
+        </button>
+      </div>
+      <p class="task-item__description" id="completed-description-ID">Task description</p>
+      <ul class="task-item__dates" aria-label="Due dates">
+        <li class="task-item__date task-item__date--past">
+          <svg class="icon" width="13" height="13" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <time datetime="2026-10-01">2026-10-01</time>
+          <span class="task-item__past">Past</span>
+        </li>
+        <li class="task-item__date">
+          <svg class="icon" width="13" height="13" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <time datetime="2026-11-05">2026-11-05</time>
+        </li>
+      </ul>
+    </div>
+    <div class="task-item__actions">
+      <button class="task-item__btn task-item__btn-copy" type="button" data-action="copy" aria-label="Copy task with a new due date: Task title">
+        <svg class="icon" width="15" height="15" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        <span>Copy</span>
+      </button>
+      <button class="task-item__btn task-item__btn-delete" type="button" data-action="delete" aria-label="Delete task: Task title">
+        <svg class="icon" width="15" height="15" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        <span>Delete</span>
+      </button>
+    </div>
+  </li>
+</template>
+
+<!-- Selected-date chip for the task form -->
+<template id="dateChipTemplate">
+  <li class="task-form__date-chip">
+    <time datetime="2026-10-25">2026-10-25</time>
+    <span class="task-item__past" hidden>Past</span>
+    <button class="task-form__date-remove" type="button" aria-label="Remove date 2026-10-25">
+      <svg class="icon" width="12" height="12" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      <span>Remove</span>
+    </button>
+  </li>
+</template>
+
+<!-- Per-task Undo control (appended next to a task that is pending deletion) -->
+<template id="undoButtonTemplate">
+  <button class="task-item__btn task-item__btn-undo" type="button" data-action="undo-delete" aria-label="Undo deletion of Task title">
+    <svg class="icon" width="15" height="15" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+    <span>Undo</span>
+  </button>
+</template>
+
+<script type="module" src="./js/app.js"></script>
+
+</body>
+</html>

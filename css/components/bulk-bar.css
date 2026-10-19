@@ -1,0 +1,26 @@
+/* Floating bulk selection actions. */
+
+/* ── Bulk action bar ────────────────────────────────────────────────────── */
+.bulk-bar {
+  position: fixed;
+  bottom: 1.5rem;
+  left: calc(var(--sidebar-width) + (100% - var(--sidebar-width)) / 2);
+  transform: translateX(-50%);
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 0.9375rem;
+  border: 1px solid var(--clr-border-form);
+  border-radius: 1rem;
+  background: var(--clr-bg-card);
+  box-shadow: 0 0.5rem 1.75rem var(--clr-primary-glow);
+}
+
+.bulk-bar__count { font-size: 0.8125rem; font-weight: 600; color: var(--clr-text-heading); white-space: nowrap; }
+.bulk-bar__actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+
+/* ==========================================================================
+   Tablet and mobile: 768px and below — navbar shown, sidebar is an off-canvas drawer
+   ========================================================================== */
+

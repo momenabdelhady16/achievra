@@ -1,0 +1,14 @@
+/* Empty list states. */
+
+/* Empty state (JS hides it with the hidden attribute once tasks exist) */
+.empty-state {
+  padding: 1.5rem 1rem;
+  border: 1px dashed var(--clr-border-empty);
+  border-radius: 0.8125rem;
+  background: var(--clr-bg-empty);
+  text-align: center;
+}
+
+.empty-state__title { font-weight: 600; color: var(--clr-text-secondary); }
+.empty-state__text { margin-top: 0.25rem; font-size: 0.6875rem; color: var(--clr-text-muted); }
+

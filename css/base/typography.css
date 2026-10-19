@@ -1,0 +1,10 @@
+/* Global type defaults. Component-specific type styles live with their components. */
+
+body {
+  margin: 0;
+  font-family: var(--ff-body);
+  font-size: 0.875rem;
+  line-height: 1.4;
+  color: var(--clr-text-body);
+  background: var(--clr-bg-page);
+}
