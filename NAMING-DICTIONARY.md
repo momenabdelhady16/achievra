@@ -70,8 +70,8 @@ The task record is named `Todo` in the specification. Its due-date array is name
 | `js/repositories/LocalStorageTodoOperationLogRepository.js` | Validates and persists the separate operation journal envelope under `achievra_todo_operation_log`. |
 | `js/services/TodoService.js` | Domain workflows, validation orchestration, duplicate/merge decisions, completion, deletion commit and list sorting. Depends on `TodoRepository`. |
 | `js/services/TodoOperationLogService.js` | Creates full write-ahead task snapshots and metadata, and records persistence, UI-check, undo, and recovery outcomes through `TodoOperationLogRepository`. |
-| `js/views/TodoView.js` | DOM binding/rendering, localized task-node updates, form state and feedback, selection, accessibility, mobile drawer, alerts and undo controls. No persistence access. |
-| `js/app.js` | Composition root: inject repository into service, bind application events, coordinate confirmations, batch actions and independent undo timers, then update only saved/affected task cards. |
+| `js/views/TodoView.js` | DOM binding/rendering, localized task-node updates, form state and feedback, selection, accessibility, mobile drawer, alerts and undo controls. Keeps task snapshots paired with rendered cards and exposes `getTodoById(id)` for application actions. No persistence access. |
+| `js/app.js` | Composition root: inject repository into service, bind application events, coordinate confirmations, batch actions and independent undo timers, then update only saved/affected task cards. Does not keep a second Todo map; reads view-associated task snapshots through `TodoView.getTodoById(id)`. |
 | `tests/TodoService.test.js` | Isolated Stage 4 TodoService tests using a fake `TodoRepository`. |
 | `package.json` | `"type": "module"` and the dependency-free `npm test` script for project test files. |
 
