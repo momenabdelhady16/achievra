@@ -60,6 +60,7 @@ The task record is named `Todo` in the specification. Its due-date array is name
 | `js/index.js` | Phase 2 public barrel. Re-export stable constants, task-model helpers, and pure utility functions from here. |
 | `js/constants.js` | Immutable validation, date, group, and sorting constants. |
 | `js/models/taskModel.js` | Phase 2 task-draft/model creation and task-input/completion-timestamp validation. |
+| `js/controllers/TodoDeletionController.js` | Coordinates journal-first pending deletion, independent five-second timers, undo actions, and delete commits using injected service, operation log, view, and error handler. |
 | `js/utils/textUtils.js` | Text normalization, grapheme counting, title/description validation and comparable text. |
 | `js/utils/dateUtils.js` | Calendar-date validation, construction, comparison, distance, past-date detection and deduplication. |
 | `js/utils/duplicateUtils.js` | Case-insensitive normalized title/description equality and repeated sentence/segment detection. |
@@ -71,7 +72,7 @@ The task record is named `Todo` in the specification. Its due-date array is name
 | `js/services/TodoService.js` | Domain workflows, validation orchestration, duplicate/merge decisions, completion, deletion commit and list sorting. Depends on `TodoRepository`. |
 | `js/services/TodoOperationLogService.js` | Creates full write-ahead task snapshots and metadata, and records persistence, UI-check, undo, and recovery outcomes through `TodoOperationLogRepository`. |
 | `js/views/TodoView.js` | DOM binding/rendering, localized task-node updates, form state and feedback, selection, accessibility, mobile drawer, alerts and undo controls. Keeps task snapshots paired with rendered cards and exposes `getTodoById(id)` for application actions. No persistence access. |
-| `js/app.js` | Composition root: inject repository into service, bind application events, coordinate confirmations, batch actions and independent undo timers, then update only saved/affected task cards. Does not keep a second Todo map; reads view-associated task snapshots through `TodoView.getTodoById(id)`. |
+| `js/app.js` | Composition root: inject dependencies, bind application events, coordinate confirmations and batch actions, then update only saved/affected task cards. Does not own delete timers or keep a second Todo map. |
 | `tests/TodoService.test.js` | Isolated Stage 4 TodoService tests using a fake `TodoRepository`. |
 | `package.json` | `"type": "module"` and the dependency-free `npm test` script for project test files. |
 
@@ -85,7 +86,8 @@ Use these exact names when those layers are added, while reusing existing Phase 
 | `js/repositories/LocalStorageTodoRepository.js` / `LocalStorageTodoRepository` | Already implemented; later layers must depend on `TodoRepository`, not this adapter. |
 | `js/services/TodoService.js` / `TodoService` | Already implemented; later layers reuse this public service API. |
 | `js/views/TodoView.js` / `TodoView` | DOM rendering and localized element updates, form state, selection, ARIA state, drawer, undo controls, timed status notifications and persistent choice notifications. No storage access. |
-| `js/app.js` | Composition root/controller: instantiate adapter/service/view, bind events, coordinate state and undo timers. |
+| `js/controllers/TodoDeletionController.js` / `TodoDeletionController` | Current delete-flow coordinator; owns independent grace-period timers and connects undo UI to TodoService and the operation log. |
+| `js/app.js` | Composition root: instantiate dependencies, bind events, and coordinate remaining application flows. |
 | `Todo` | Domain record name used by repository and service contracts; its current model helpers live in `js/models/taskModel.js`. |
 | `textUtils.js`, `dateUtils.js`, `duplicateUtils.js`, `sortUtils.js` | Focused utility modules; use these paths rather than adding `validation.js` or `helpers.js`. |
 
@@ -100,7 +102,7 @@ Keep implementation prompts and handoffs in this order. Completed stages are inc
 | 3 — Repository and persistence (complete) | Storage-independent repository contract and LocalStorage adapter, versioned persistence, ID creation, migration, typed errors. | `TodoRepository`, `LocalStorageTodoRepository`, `getAll`, `create`, `update`, `merge`, `deleteMany`, `resetStorage`, `dueDates`. |
 | 4 — Domain service (complete) | Business workflows, validation orchestration, duplicate/merge outcomes, list ordering and batch operations over the repository contract. | `TodoService`, `TodoOperationResult`, `TodoInput`, `TodoUpdate`, `TodoDecisions`. |
 | 5 — View layer (complete) | DOM binding/rendering, localized task-node mutations, form feedback, selection, accessibility, drawer and undo controls. | `TodoView`, the registered HTML IDs, CSS classes and `data-action` values. |
-| 6 — Application composition and integration (implemented; browser acceptance pending) | Instantiate/inject repository, service and view; wire UI actions, confirmations, independent deletion timers and successful persistence to granular DOM updates. | `js/app.js`, `repository`, `todoService`, `todoView`, `selectedTodoIds`, `pendingDeleteTimers`. |
+| 6 — Application composition and integration (implemented; browser acceptance pending) | Instantiate/inject repository, service, view and current deletion coordinator; wire UI actions, confirmations and successful persistence to granular DOM updates. | `js/app.js`, `TodoDeletionController`, `repository`, `todoService`, `todoView`, `selectedTodoIds`. |
 | 7 — Write-ahead operation journal and recovery (implemented; browser acceptance pending) | Append a detailed log entry before task writes; record delete intent before its grace period; recover incomplete writes on startup; every five seconds compare journaled IDs updated in the last seven seconds with storage and DOM. | `TodoOperationLogRepository`, `LocalStorageTodoOperationLogRepository`, `TodoOperationLogService`, `recordBeforePersist`, `recordPendingDelete`, `recoverIncompleteOperations`, `checkRecentOperationLog`. |
 
 Each stage implements only its listed layer and its named files. A later stage reuses earlier public identifiers exactly; it does not reimplement or rename them. If an implementation handoff exposes a mismatch with this dictionary, correct the implementation to the dictionary before building the next stage.
@@ -258,12 +260,9 @@ TodoView's local helper identifiers are also reserved for their stated view role
 | `repository` | The injected `LocalStorageTodoRepository` adapter instance. Only used by the composition root for explicit recovery reset; regular reads/writes go through `todoService`. |
 | `operationLogRepository` | Independent operation-journal adapter instance; exposes its configured `storageKey` for cross-tab storage events. |
 | `todoService` | The domain service instance receiving `repository`. |
-| `todoView` | The DOM view instance receiving the page `Document`. |
-| `todosById` | Composition-root lookup map synchronized after successful service operations; used to resolve task IDs to current records for actions and messages. |
-| `pendingDeleteTimers` | Map of task ID to that task's independent five-second timeout, countdown interval, and deadline. |
+| `todoView` | The DOM view instance receiving the page `Document`; it keeps task snapshots paired with rendered cards and exposes `getTodoById(id)` for application actions. |
+| `todoDeletionController` | The injected coordinator for journal-first pending deletion, independent undo timers, undo actions, and delete commits. |
 | `duplicateHighlightTimers` | Map of task ID to the timer that clears its temporary duplicate-result highlight. |
-| `DELETE_GRACE_PERIOD_MS` | Per-task deletion grace duration, `5000`. |
-| `UNDO_COUNTDOWN_INTERVAL_MS` | UI countdown refresh interval, `1000`. |
 | `DUPLICATE_HIGHLIGHT_DURATION_MS` | Duration of the temporary duplicate-result card highlight, `2500`. |
 | `OPERATION_LOG_CHECK_INTERVAL_MS` | Operation-journal checker interval, `5000` milliseconds. |
 | `OPERATION_LOG_RECENT_WINDOW_MS` | Recent-journal query window, `7000` milliseconds. |
@@ -273,8 +272,7 @@ TodoView's local helper identifiers are also reserved for their stated view role
 | `recoveredDeleteOperations` | Delete journal entries awaiting restart of their individual five-second timer after initial load. |
 | `hasReportedBackgroundCorruption` | Avoid repeating the task-storage corruption message during background operation. |
 | `selectedTodoIds()` | Read current checkbox selection from `todoView`. |
-| `updateTodoIndex(todo)`, `removeTodoFromIndex(id)` | Synchronize the composition-root `todosById` lookup map after successful persisted changes. |
-| `loadTaskLists()` | Recover unresolved journal entries, read sorted task sections, sync the lookup map, perform the one allowed initial full render, and restart timers only for `delete-pending` or `commit-requested` delete entries. |
+| `loadTaskLists()` | Recover unresolved journal entries, read sorted task sections, perform the one allowed initial full render, and restart timers only for `delete-pending` or `commit-requested` delete entries. |
 | `recoverIncompleteOperations()` | Compare eligible unresolved operation before/after snapshots with persisted task data; replay a complete valid interrupted operation or ask the user to review available fields. Explicitly failed deletes are kept in the journal but not automatically retried. |
 | `checkRecentOperationLog()` | Every five seconds inspect only committed entries updated in the prior seven seconds; compare journal state against storage and DOM by affected task ID, repair that ID, and remove stored data only for an explicitly committed delete or merge-source removal. |
 | `isCommittedRemoval` | Guard that permits reconciliation to remove stored data only for a committed delete or a committed merge snapshot that omits the affected source ID. |
@@ -284,18 +282,26 @@ TodoView's local helper identifiers are also reserved for their stated view role
 | `applySuccessfulOperation(result, editingTodoId, closeTaskForm)` | Update/add the saved task card, remove an absorbed source card after merge, and close the form only for a successful form save. |
 | `showError(error)` | Route typed validation, storage and corruption errors to field feedback, an alert or the explicit recovery dialog. |
 | `highlightDuplicate(todo)` | Highlight an existing duplicate task temporarily and manage its clearing timer. |
-| `beginPendingDeletion(id, existingOperationId, isRecovered)` | Journal the delete intent before muting, then start the independent five-second timer; recovery restarts a fresh timer. |
-| `clearDeleteTimer(id)` | Clear one task's timeout and countdown interval and remove its active undo state. |
-| `refreshUndoAllControl()` | Re-render Undo All using only IDs with active timers. |
-| `restorePendingDeletion(id)` | Cancel one active timer and restore its task card. |
-| `undoAllPendingDeletions(ids)` | Cancel only the supplied IDs that still have active timers. |
-| `commitExpiredDeletion(id)` | Call `todoService.commitDelete([id])` after that task's own grace period and animate card removal only when deletion succeeds. |
 | `removeDueDateFromTodo(id, date)` | Persist removal of one due date and update only that task card after success. |
 | `completeSelectedTodos()` | Complete the currently selected pending IDs, render successful records, and report per-record failures. |
 | `deleteSelectedTodos()` | Start an independent deletion window for each selected task. |
 | `handleTaskAction(event)` | Route delegated task/date/undo actions by their registered `data-action`. |
 
-The composition root wires form submission and counters, task selection and card actions, bulk actions, drawer controls, and deletion timers. Each task has its own five-second timer; Undo All addresses only IDs whose timers are still active. Ordinary reads/writes and deletion commits go through `todoService`; only explicit, user-triggered recovery calls `repository.resetStorage()`.
+`TodoDeletionController` owns each task's independent five-second timer and the corresponding undo coordination. `app.js` routes selected-task delete actions to it but does not own timer state. Ordinary reads/writes and deletion commits go through `todoService`; only explicit, user-triggered recovery calls `repository.resetStorage()`.
+
+### `js/controllers/TodoDeletionController.js` vocabulary
+
+| Identifier | Role |
+|---|---|
+| `TodoDeletionController` | Injected coordinator for the current deletion grace-period workflow. |
+| `beginPendingDeletion(id, existingOperationId, isRecovered)` | Record or resume the delete intent before muting the task and arming its five-second timer. |
+| `restorePendingDeletion(id, showFeedback)` | Cancel one active deletion, record the undo outcome, and remove its undo control. |
+| `undoAllPendingDeletions(ids)` | Undo only the supplied IDs whose timers remain active. |
+| `commitExpiredDeletion(id)` | Commit one expired delete through TodoService and remove the card after successful persistence. |
+| `isPending(id)` | Report whether this task currently has an active grace-period timer. |
+| `pendingDeleteTimers` | Controller-owned map of each task's deadline, timeout, countdown interval, and operation ID. |
+| `DELETE_GRACE_PERIOD_MS` | Per-task deletion grace duration, `5000`. |
+| `UNDO_COUNTDOWN_INTERVAL_MS` | Undo countdown refresh interval, `1000`. |
 
 ## 7. Existing Phase 2 exported API
 
