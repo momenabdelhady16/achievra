@@ -34,7 +34,6 @@ const operationLogRepository = new LocalStorageTodoOperationLogRepository();
 const todoOperationLog = new TodoOperationLogService(operationLogRepository);
 const todoService = new TodoService(repository, todoOperationLog);
 const todoView = new TodoView();
-const todosById = new Map();
 const pendingDeleteTimers = new Map();
 const duplicateHighlightTimers = new Map();
 let hasLoadedTaskLists = false;
@@ -57,8 +56,6 @@ function showError(error) {
     todoView.showCorruptionDialog(async () => {
       await repository.resetStorage();
       const { pendingTodos, completedTodos } = await todoService.getTaskLists();
-      todosById.clear();
-      for (const todo of [...pendingTodos, ...completedTodos]) updateTodoIndex(todo);
       todoView.renderInitialLists(pendingTodos, completedTodos);
       hasLoadedTaskLists = true;
     });
@@ -91,16 +88,6 @@ function operationSnapshotsMatch(expectedTodos, actualTodos) {
 
 function selectedTodoIds() {
   return todoView.getSelectedTodoIds();
-}
-
-function updateTodoIndex(todo) {
-  if (todo && typeof todo.id === 'string' && todo.id.length > 0) {
-    todosById.set(todo.id, todo);
-  }
-}
-
-function removeTodoFromIndex(id) {
-  todosById.delete(id);
 }
 
 async function recoverIncompleteOperations() {
@@ -221,8 +208,6 @@ async function loadTaskLists() {
   try {
     await recoverIncompleteOperations();
     const { pendingTodos, completedTodos } = await todoService.getTaskLists();
-    todosById.clear();
-    for (const todo of [...pendingTodos, ...completedTodos]) updateTodoIndex(todo);
     todoView.renderInitialLists(pendingTodos, completedTodos);
     hasLoadedTaskLists = true;
     hasReportedBackgroundCorruption = false;
@@ -267,7 +252,6 @@ async function checkRecentOperationLog() {
         if (!todoView.isTodoElementConsistent(actual) ||
             !todoView.isTodoElementInSection(id, actual.completed)) {
           todoView.updateTodoElement(actual);
-          updateTodoIndex(actual);
           await todoOperationLog.markUiState(entry.operationId, 'repaired-from-journal');
         } else {
           await todoOperationLog.markUiState(entry.operationId, 'matched-journal');
@@ -288,7 +272,6 @@ async function checkRecentOperationLog() {
           storedById.delete(id);
         }
         if (todoView.getRenderedTodoIds().includes(id)) todoView.removeTodoElement(id);
-        removeTodoFromIndex(id);
         await todoOperationLog.markUiState(entry.operationId, 'deletion-matched-journal');
       }
     }
@@ -348,7 +331,7 @@ async function restorePendingDeletion(id, showFeedback = true) {
   pendingDeleteTimers.delete(id);
   todoView.removeTaskUndoControl(id);
   refreshUndoAllControl();
-  const todo = todosById.get(id);
+  const todo = todoView.getTodoById(id);
   if (showFeedback && todo) todoView.showStorageAlert(`Deletion canceled. “${todo.title}” is still saved.`, 'info');
   return true;
 }
@@ -379,13 +362,12 @@ async function commitExpiredDeletion(id) {
     );
     if (result.deletedIds.includes(id)) {
       await todoView.animateTodoRemoval(id);
-      removeTodoFromIndex(id);
       todoView.showStorageAlert('Task deleted.', 'success');
     }
     const failure = result.failures.find((item) => item.id === id);
     if (failure) {
       todoView.removeTaskUndoControl(id);
-      const todo = todosById.get(id);
+      const todo = todoView.getTodoById(id);
       const title = todo ? `“${todo.title}”: ` : '';
       todoView.showStorageAlert(`${title}${failure.message}`, 'error');
     }
@@ -398,11 +380,11 @@ async function commitExpiredDeletion(id) {
 }
 
 async function beginPendingDeletion(id, existingOperationId = null, isRecovered = false) {
-  if (!todosById.has(id) || pendingDeleteTimers.has(id)) return;
+  if (!todoView.getTodoById(id) || pendingDeleteTimers.has(id)) return;
   let operationId = existingOperationId;
   if (!operationId) {
     try {
-      operationId = await todoOperationLog.recordPendingDelete(todosById.get(id));
+      operationId = await todoOperationLog.recordPendingDelete(todoView.getTodoById(id));
     } catch (error) {
       showError(error);
       return;
@@ -479,11 +461,9 @@ function applySuccessfulOperation(result, editingTodoId, closeTaskForm = true) {
 
   if (result.status === 'merged' && editingTodoId && editingTodoId !== savedTodo.id) {
     todoView.removeTodoElement(editingTodoId);
-    removeTodoFromIndex(editingTodoId);
   }
   if (result.status === 'created') todoView.addTodoElement(savedTodo);
   else todoView.updateTodoElement(savedTodo);
-  updateTodoIndex(savedTodo);
   const message = result.status === 'merged'
     ? 'Task details were merged and saved.'
     : result.status === 'updated'
@@ -515,7 +495,7 @@ async function handleTaskFormSubmit(event) {
 }
 
 async function removeDueDateFromTodo(id, date) {
-  const todo = todosById.get(id);
+  const todo = todoView.getTodoById(id);
   if (!todo || todo.completed || !todo.dueDates.includes(date)) return;
   try {
     const changes = { dueDates: todo.dueDates.filter((dueDate) => dueDate !== date) };
@@ -532,7 +512,6 @@ async function removeDueDateFromTodo(id, date) {
       result = await todoService.updatePendingTodo(id, changes, decisions);
     }
     if (result.status === 'updated') {
-      updateTodoIndex(result.todo);
       todoView.updateTodoElement(result.todo);
     } else if (result.status === 'merged') {
       applySuccessfulOperation(result, id, false);
@@ -551,12 +530,11 @@ async function completeSelectedTodos() {
   try {
     const { completed, failures } = await todoService.completeTodos(ids);
     for (const todo of completed) {
-      updateTodoIndex(todo);
       todoView.moveTodoElement(todo.id, 'completed', todo);
     }
     if (failures.length > 0) {
       const details = failures.map((failure) => {
-        const todo = todosById.get(failure.id);
+        const todo = todoView.getTodoById(failure.id);
         return `${todo?.title ?? failure.id}: ${failure.message}`;
       });
       todoView.showStorageAlert(`Some tasks could not be completed. ${details.join(' ')}`, 'error');
@@ -579,7 +557,7 @@ function handleTaskAction(event) {
   const action = actionElement.dataset.action;
   const taskCard = actionElement.closest('.task-item');
   const id = taskCard?.dataset.id;
-  const todo = id ? todosById.get(id) : null;
+  const todo = id ? todoView.getTodoById(id) : null;
   const selected = id ? todoView.getSelectedTodoIds().includes(id) : false;
 
   if (action === 'remove-selected-date') {
