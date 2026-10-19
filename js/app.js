@@ -1,9 +1,9 @@
 /**
  * Achievra — Stage 6 application composition root.
  *
- * This module wires the repository, domain service, and DOM view. Domain rules
- * stay in TodoService; the view never persists data. Every successful mutation
- * is reflected through a localized card update.
+ * This module composes the repository, domain service, operation log, deletion
+ * controller, and DOM view. Domain rules stay in TodoService; the view never
+ * persists data. Every successful mutation updates only its affected card.
  */
 
 import { LocalStorageTodoRepository } from './repositories/LocalStorageTodoRepository.js';
@@ -16,10 +16,9 @@ import {
 } from './repositories/TodoRepository.js';
 import { TodoService } from './services/TodoService.js';
 import { TodoOperationLogService } from './services/TodoOperationLogService.js';
+import { TodoDeletionController } from './controllers/TodoDeletionController.js';
 import { TodoView } from './views/TodoView.js';
 
-const DELETE_GRACE_PERIOD_MS = 5000;
-const UNDO_COUNTDOWN_INTERVAL_MS = 1000;
 const DUPLICATE_HIGHLIGHT_DURATION_MS = 2500;
 const OPERATION_LOG_CHECK_INTERVAL_MS = 5000;
 const OPERATION_LOG_RECENT_WINDOW_MS = 7000;
@@ -34,7 +33,12 @@ const operationLogRepository = new LocalStorageTodoOperationLogRepository();
 const todoOperationLog = new TodoOperationLogService(operationLogRepository);
 const todoService = new TodoService(repository, todoOperationLog);
 const todoView = new TodoView();
-const pendingDeleteTimers = new Map();
+const todoDeletionController = new TodoDeletionController({
+  todoService,
+  todoOperationLog,
+  todoView,
+  onError: showError,
+});
 const duplicateHighlightTimers = new Map();
 let hasLoadedTaskLists = false;
 let isCheckingOperationLog = false;
@@ -121,7 +125,7 @@ async function recoverIncompleteOperations() {
         } else if (
           entry.status === 'delete-pending' ||
           entry.status === 'commit-requested' ||
-          (entry.status === 'prepared' && entry.metadata.delete?.gracePeriodMs === DELETE_GRACE_PERIOD_MS)
+          (entry.status === 'prepared' && entry.metadata.delete?.gracePeriodMs === 5000)
         ) {
           recoveredDeleteOperations.push({ id: todoId, operationId: entry.operationId });
         } else {
@@ -214,7 +218,7 @@ async function loadTaskLists() {
     const pendingDeletes = recoveredDeleteOperations;
     recoveredDeleteOperations = [];
     for (const operation of pendingDeletes) {
-      await beginPendingDeletion(operation.id, operation.operationId, true);
+      await todoDeletionController.beginPendingDeletion(operation.id, operation.operationId, true);
     }
   } catch (error) {
     showError(error);
@@ -285,125 +289,6 @@ async function checkRecentOperationLog() {
   } finally {
     isCheckingOperationLog = false;
   }
-}
-
-function refreshUndoAllControl() {
-  todoView.renderUndoAllControl(
-    [...pendingDeleteTimers.keys()],
-    undoAllPendingDeletions
-  );
-}
-
-function clearDeleteTimer(id) {
-  const timerState = pendingDeleteTimers.get(id);
-  if (!timerState) return false;
-  globalThis.clearTimeout(timerState.timeoutId);
-  globalThis.clearInterval(timerState.intervalId);
-  pendingDeleteTimers.delete(id);
-  return true;
-}
-
-function armDeleteTimer(id, timerState) {
-  timerState.intervalId = globalThis.setInterval(() => {
-    const remaining = Math.max(0, Math.ceil((timerState.deadline - Date.now()) / 1000));
-    todoView.renderTaskUndoControl(id, remaining, restorePendingDeletion);
-  }, UNDO_COUNTDOWN_INTERVAL_MS);
-  timerState.timeoutId = globalThis.setTimeout(() => {
-    void commitExpiredDeletion(id);
-  }, Math.max(0, timerState.deadline - Date.now()));
-}
-
-async function restorePendingDeletion(id, showFeedback = true) {
-  const timerState = pendingDeleteTimers.get(id);
-  if (!timerState) return false;
-  globalThis.clearTimeout(timerState.timeoutId);
-  globalThis.clearInterval(timerState.intervalId);
-  if (timerState.operationId) {
-    try {
-      await todoOperationLog.markUndone(timerState.operationId);
-    } catch (error) {
-      showError(error);
-      timerState.deadline = Date.now() + DELETE_GRACE_PERIOD_MS;
-      armDeleteTimer(id, timerState);
-      return false;
-    }
-  }
-  pendingDeleteTimers.delete(id);
-  todoView.removeTaskUndoControl(id);
-  refreshUndoAllControl();
-  const todo = todoView.getTodoById(id);
-  if (showFeedback && todo) todoView.showStorageAlert(`Deletion canceled. “${todo.title}” is still saved.`, 'info');
-  return true;
-}
-
-async function undoAllPendingDeletions(ids = [...pendingDeleteTimers.keys()]) {
-  const restoredResults = await Promise.all(ids.map((id) => restorePendingDeletion(id, false)));
-  const restoredCount = restoredResults.filter(Boolean).length;
-  refreshUndoAllControl();
-  if (restoredCount > 0) {
-    todoView.showStorageAlert(
-      `${restoredCount} ${restoredCount === 1 ? 'deletion was' : 'deletions were'} canceled. The tasks are still saved.`,
-      'info'
-    );
-  }
-}
-
-async function commitExpiredDeletion(id) {
-  const timerState = pendingDeleteTimers.get(id);
-  if (!timerState) return;
-  globalThis.clearInterval(timerState.intervalId);
-  pendingDeleteTimers.delete(id);
-  refreshUndoAllControl();
-
-  try {
-    const result = await todoService.commitDelete(
-      [id],
-      { [id]: timerState.operationId }
-    );
-    if (result.deletedIds.includes(id)) {
-      await todoView.animateTodoRemoval(id);
-      todoView.showStorageAlert('Task deleted.', 'success');
-    }
-    const failure = result.failures.find((item) => item.id === id);
-    if (failure) {
-      todoView.removeTaskUndoControl(id);
-      const todo = todoView.getTodoById(id);
-      const title = todo ? `“${todo.title}”: ` : '';
-      todoView.showStorageAlert(`${title}${failure.message}`, 'error');
-    }
-  } catch (error) {
-    todoView.removeTaskUndoControl(id);
-    showError(error);
-  } finally {
-    refreshUndoAllControl();
-  }
-}
-
-async function beginPendingDeletion(id, existingOperationId = null, isRecovered = false) {
-  if (!todoView.getTodoById(id) || pendingDeleteTimers.has(id)) return;
-  let operationId = existingOperationId;
-  if (!operationId) {
-    try {
-      operationId = await todoOperationLog.recordPendingDelete(todoView.getTodoById(id));
-    } catch (error) {
-      showError(error);
-      return;
-    }
-  }
-  if (isRecovered && existingOperationId) {
-    try { await todoOperationLog.restartPendingDelete(existingOperationId); } catch (error) {
-      showError(error);
-      return;
-    }
-  }
-  todoView.setTaskSelected(id, false);
-  todoView.setTaskPendingDeletion(id, true);
-  const deadline = Date.now() + DELETE_GRACE_PERIOD_MS;
-  const timerState = { deadline, timeoutId: null, intervalId: null, operationId };
-  pendingDeleteTimers.set(id, timerState);
-  armDeleteTimer(id, timerState);
-  todoView.renderTaskUndoControl(id, 5, restorePendingDeletion);
-  refreshUndoAllControl();
 }
 
 function highlightDuplicate(todo) {
@@ -548,7 +433,7 @@ async function completeSelectedTodos() {
 
 function deleteSelectedTodos() {
   const ids = selectedTodoIds();
-  for (const id of ids) void beginPendingDeletion(id);
+  for (const id of ids) void todoDeletionController.beginPendingDeletion(id);
 }
 
 function handleTaskAction(event) {
@@ -570,15 +455,15 @@ function handleTaskAction(event) {
     if (id) void removeDueDateFromTodo(id, actionElement.dataset.date);
     return;
   }
-  if (!id || !todo || pendingDeleteTimers.has(id)) return;
+  if (!id || !todo || todoDeletionController.isPending(id)) return;
   if (action === 'edit' && selected && !todo.completed) {
     todoView.openTaskForm(todo);
   } else if (action === 'copy' && selected && todo.completed) {
     todoView.openTaskForm(todo);
   } else if (action === 'delete' && selected) {
-    void beginPendingDeletion(id);
+    void todoDeletionController.beginPendingDeletion(id);
   } else if (action === 'undo-delete') {
-    restorePendingDeletion(id);
+    todoDeletionController.restorePendingDeletion(id);
   }
 }
 
