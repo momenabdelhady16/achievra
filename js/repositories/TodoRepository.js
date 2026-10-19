@@ -6,6 +6,26 @@
  */
 
 /**
+ * Options shared by asynchronous repository mutations.
+ * `beforePersist` is an awaited write-ahead hook. The adapter passes detached
+ * snapshots for the affected records and must not persist the Todo mutation if
+ * the hook rejects. These options describe journal coordination without
+ * exposing LocalStorage, HTTP, SQL, or other storage details.
+ *
+ * @typedef {Object} TodoRepositoryWriteOptions
+ * @property {(details: Readonly<{
+ *   operationType: string,
+ *   beforeTodos: readonly object[],
+ *   afterTodos: readonly object[],
+ *   metadata?: object,
+ *   operationIdByTaskId?: Record<string, string>
+ * }>) => Promise<void>} [beforePersist]
+ * @property {string} [operationType] - Operation kind supplied to the journal hook.
+ * @property {object} [metadata] - Additional operation-specific journal metadata.
+ * @property {Record<string, string>} [operationIdByTaskId] - Existing journal IDs used by batch deletion.
+ */
+
+/**
  * Domain/model validation or business-rule error raised when task fields,
  * record shapes, immutable-ID constraints, or method arguments are invalid.
  */
@@ -86,6 +106,7 @@ export class TodoRepository {
    *   completed?: boolean,
    *   completedAt?: string | null
    * }>} todoData - Task data without an `id`
+   * @param {TodoRepositoryWriteOptions} [options] - Optional write-ahead and journal context.
    * @returns {Promise<Readonly<{
    *   id: string,
    *   title: string,
@@ -113,6 +134,7 @@ export class TodoRepository {
    *   completed?: boolean,
    *   completedAt?: string | null
    * }>} changes - Allowed fields to update on the existing record
+   * @param {TodoRepositoryWriteOptions} [options] - Optional write-ahead and journal context.
    * @returns {Promise<Readonly<{
    *   id: string,
    *   title: string,
@@ -143,6 +165,7 @@ export class TodoRepository {
    *   completed?: boolean,
    *   completedAt?: string | null
    * }>} targetChanges - Resulting fields for the retained target task
+   * @param {TodoRepositoryWriteOptions} [options] - Optional write-ahead and journal context.
    * @returns {Promise<Readonly<{
    *   id: string,
    *   title: string,
@@ -165,6 +188,7 @@ export class TodoRepository {
    * are invalid or missing; returns both deleted IDs and per-ID failure details.
    *
    * @param {readonly string[]} ids - List of Todo IDs to delete
+   * @param {TodoRepositoryWriteOptions} [options] - Optional write-ahead and journal context.
    * @returns {Promise<{
    *   deletedIds: string[],
    *   failures: Array<{ id: string, message: string }>
@@ -180,6 +204,7 @@ export class TodoRepository {
    * Idempotently restore one already-validated task snapshot during operation-log recovery.
    * This is an internal recovery path; normal creates still generate their IDs in create().
    * @param {Readonly<object>} todoSnapshot
+   * @param {TodoRepositoryWriteOptions} [options] - Optional write-ahead and journal context.
    * @returns {Promise<Readonly<object>>}
    */
   async restoreTodoSnapshot(todoSnapshot, options = {}) {
