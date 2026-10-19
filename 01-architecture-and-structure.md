@@ -70,6 +70,7 @@ Persistence uses browser `localStorage` wrapped behind an asynchronous Repositor
    - `TodoRepository.js`: Contract interface specifying only required storage methods (`getAll`, `create`, `update`, atomic `merge`, `deleteMany`).
    - `LocalStorageTodoRepository.js`: Exclusively handles serialization, deserialization, envelope validation, and `localStorage` I/O.
    - `TodoService.js`: Implements domain logic, validation orchestration, duplicate handling, merge decisions, and sorting. Does not know storage details or touch DOM.
+   - `TodoDeletionController.js`: Coordinates active five-second delete windows, write-ahead log state, undo controls, and delete commits. Receives its service, log, view, and error-handler dependencies from `app.js`.
    - `TodoView.js`: DOM manipulation, rendering, event bubbling/binding, accessibility attributes, CSS transitions, and the task snapshots paired with currently rendered cards. `app.js` reads a task needed for an action through `getTodoById()` instead of keeping a second task map. The repository remains the persisted-data authority; the view cache is only for coordinating the current DOM. Never accesses storage.
    - `app.js`: Composition root and application event coordinator. Instantiates dependencies, injects the Todo repository and operation-log service, binds UI events, coordinates undo timers, resumes unresolved journal entries at startup, and checks only journaled task IDs changed within the last seven seconds every five seconds. It must not keep a parallel copy of the Todo records; task snapshots needed for a UI action come from `TodoView.getTodoById()`.
    - `TodoOperationLogService.js`: Records full write-ahead task snapshots and descriptive metadata through its own repository contract; it does not access the DOM or the Todo storage key.
@@ -123,6 +124,8 @@ todo-app/
 │   ├── constants.js                     # Shared domain constants
 │   ├── models/
 │   │   └── taskModel.js                 # Todo model helpers and invariants
+│   ├── controllers/
+│   │   └── TodoDeletionController.js    # Delete grace periods, undo, and delete commits
 │   ├── repositories/
 │   │   ├── TodoRepository.js            # Abstract interface / JSDoc contract
 │   │   ├── LocalStorageTodoRepository.js # Concrete localStorage adapter
@@ -141,22 +144,8 @@ todo-app/
 └── README.md
 ```
 
-### Script Loading Order in `index.html`
-Scripts are loaded in dependency order without a bundler:
-1. `js/constants.js`
-2. `js/utils/textUtils.js`
-3. `js/utils/dateUtils.js`
-4. `js/utils/duplicateUtils.js`
-5. `js/utils/sortUtils.js`
-6. `js/models/taskModel.js`
-7. `js/repositories/TodoRepository.js`
-8. `js/repositories/LocalStorageTodoRepository.js`
-9. `js/repositories/TodoOperationLogRepository.js`
-10. `js/repositories/LocalStorageTodoOperationLogRepository.js`
-11. `js/services/TodoOperationLogService.js`
-12. `js/services/TodoService.js`
-13. `js/views/TodoView.js`
-14. `js/app.js`
+### JavaScript Module Loading in `index.html`
+`index.html` loads `js/app.js` as an ES module. Dependencies are resolved through static `import` statements; do not add a second ordered list of classic script tags.
 
 ---
 
@@ -164,7 +153,7 @@ Scripts are loaded in dependency order without a bundler:
 
 1. **Initialization:**
    - `app.js` runs on `DOMContentLoaded`.
-   - Instantiates `LocalStorageTodoRepository`, `TodoOperationLogService` with its independent adapter, `TodoService(repo, operationLog)`, and `TodoView()`.
+   - Instantiates `LocalStorageTodoRepository`, `TodoOperationLogService` with its independent adapter, `TodoService(repo, operationLog)`, `TodoView()`, and `TodoDeletionController` with injected dependencies.
    - Recovers unresolved journal entries before loading lists, then calls `TodoService.getTaskLists()`, which reads stored tasks and returns them split and sorted by section.
    - `LocalStorageTodoRepository` reads and validates envelope `{ schemaVersion: 2, todos: [...] }`; migrates valid v1 records (`date` to `dueDates`).
    - `TodoView.renderInitialLists(pendingTodos, completedTodos)` populates Pending & Completed sections.
